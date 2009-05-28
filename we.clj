@@ -1,24 +1,16 @@
 ;;;;;;;;;;;;;;;;;
 ; Questions:
-; - So wait, we can re-def something? Isn't everything immutable?
-; - Am I using atom and @ correctly?
 ; - Use ref to support the mutual modification of *we-objects* and *we-branches*
 ; - Does it even make sense to have two dictionaries?
 ;
 ; To-do:
-; - De/Re-construction of objects
-; - Object diff
-; - Web server/JSON layer
 ; - Comet for branches
 ; - DB visual explorer of some sort (is this just a we js view? hmm. probably.)
 ; - Better generate-id
-; - CouchDB
-; - History
 ; - Date/time
 ;
 ; Think:
 ; - Merge branches?
-; - Ordering within a dictionary using "aabbba"-type keys
 ;;;;;;;;;;;;;;;;;
 
 (ns we
