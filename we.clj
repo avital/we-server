@@ -46,40 +46,61 @@
 (defn object-revision-id [object-id] (@*we-objects* object-id))
 (defn load-revision [revision-id] (@*we-revisions* revision-id))
 
-(defn load-object [object-id] 
-  (load-revision (object-revision-id (to-int object-id))))
+(defn load-object-bare [object-id] 
+  (load-revision (or (object-revision-id (to-int object-id)) object-id)))
+
+(defn expand-value [value]
+  (cond 
+    (map? value) (load-object (value "_link"))
+    (or (vector? value) (seq? value)) (map expand-value value)
+    :else value))
+
+(defn load-object [object-id]
+  (let [object-bare (load-object-bare object-id)]
+    (zipmap (keys object-bare) (map expand-value (vals object-bare)))))
 
 (defn ensure-object-id [object]
-  (if (object :_object-id)
+  (if (object "_object-id")
     object
     (let [object-id (generate-id)]
       (db-add! *we-objects* object-id nil)
-      (assoc object :_object-id object-id))))
+      (assoc object "_object-id" object-id))))
+
+(defn ensure-valid-link [value]
+  (cond 
+    (and (map? value) (not (value "_link"))) {"_link" ((save-object value) "_object-id")}
+    (vector? value) (doall (map ensure-valid-link value))
+    :else value))
+  
+(defn save-subobjects [object]
+  (zipmap (keys object)
+	  (doall (map ensure-valid-link (vals object)))))
 
 (defn save-object [object]
-  (let [object1 (ensure-object-id object)]
-    (let [object-id (object1 :_object-id)]
-      (if (not= (object-revision-id object-id) (object1 :_revision-id))
-	nil
+  (let [object1 (save-subobjects (ensure-object-id object))]
+    (let [object-id (object1 "_object-id")]
+      (if (not= (object-revision-id object-id) (object1 "_revision-id"))
+	(throw (new java.util.ConcurrentModificationException))
 	(let [new-id (generate-id)]
 	  (db-add! *we-objects* object-id new-id)
-	  (db-add! *we-revisions* new-id (assoc object1 :_revision-id new-id :_last-revision-id (object1 :_revision-id))))))))
-
-(save-object {:name "Avital"})
-(save-object (assoc (load-object 595751218) :last "Oliver2"))
-
-@*we-objects*
-@*we-revisions*
+	  (db-add! *we-revisions* new-id (assoc object1 "_revision-id" new-id "_last-revision-id" (object1 "_revision-id")))
+	  (load-object object-id))))))
 
 (defroutes greeter
   (GET "/object/:id" (json-str (load-object (params :id))))
-  (POST "/object/:id" (save-object (read-json-string (params :doc))))
+  (GET "/object/:id/bare" (json-str (load-object-bare (params :id))))
+  (POST "/object/:id" (try
+		       (json-str (save-object (read-json-string (params :doc))))
+	(catch Exception e "")))
+  (GET "/new" (html [:html 
+	       [:body 
+		[:a 
+		 {:href (str "/#" ((save-object {}) "_object-id"))}
+		 "link (sorry for the bad hackiness)"]]]))
   (GET "/" (java.io.File. "/home/avital/we/core/core.html"))
   (GET "/view/*" (java.io.File. (str "/home/avital/we/views/" (params :*))))
   (GET "/*" (java.io.File. (str "/home/avital/we/core/" (params :*)))))
 
 (run-server {:port 8080}
   "/*" (servlet greeter))
-
-
 
